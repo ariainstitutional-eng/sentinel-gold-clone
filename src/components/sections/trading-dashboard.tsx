@@ -14,7 +14,7 @@ import { RiskManagementTab } from "./tabs/risk-management-tab";
 import { PerformanceTab } from "./tabs/performance-tab";
 import { AITrainingTab } from "./tabs/ai-training-tab";
 import { MarketIntelligenceTab } from "./tabs/market-intelligence-tab";
-import { SystemControlTab } from "./tabs/system-control-tab";
+import SystemControlTab from "./tabs/system-control-tab";
 
 export default function TradingDashboard() {
   return (

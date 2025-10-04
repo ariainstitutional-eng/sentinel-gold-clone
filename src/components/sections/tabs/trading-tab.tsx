@@ -15,6 +15,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import Script from "next/script";
 import { SymbolSelector, SYMBOLS, type Symbol } from "@/components/sections/symbol-selector";
+import { MultiTimeframeAnalysis } from "@/components/sections/multi-timeframe-analysis";
 
 interface Signal {
   direction: string;
@@ -245,7 +246,7 @@ export function TradingTab() {
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
           {/* Main Chart */}
-          <div className="xl:col-span-9">
+          <div className="xl:col-span-9 space-y-4">
             <Card className="border-border bg-card/50 backdrop-blur-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                 <div className="flex items-center gap-4">
@@ -308,6 +309,9 @@ export function TradingTab() {
                 )}
               </CardContent>
             </Card>
+            
+            {/* Multi-Timeframe Analysis */}
+            <MultiTimeframeAnalysis symbol={selectedSymbol.id} />
           </div>
 
           {/* AI Signal Panel */}

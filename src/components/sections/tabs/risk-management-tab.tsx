@@ -1,12 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Shield, AlertTriangle, TrendingDown, Activity, DollarSign, Target, Calculator, PieChart, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { 
+  Shield, 
+  DollarSign, 
+  TrendingDown,
+  Calculator,
+  AlertTriangle,
+  RefreshCw
+} from "lucide-react";
+import { toast } from "sonner";
+import { PortfolioDiversification } from "@/components/sections/portfolio-diversification";
 
 interface RiskLimits {
   maxDailyLoss: number;
@@ -142,124 +151,11 @@ export function RiskManagementTab() {
 
   return (
     <div className="space-y-4">
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-warning-red/10 border border-warning-red/30 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-warning-red flex-shrink-0" />
-          <p className="text-sm text-warning-red">{error}</p>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Shield className="w-6 h-6 text-success-green" />
-          <h2 className="text-xl font-bold text-text-primary">Risk Management</h2>
-        </div>
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded ${riskLevel.bg}`}>
-          <Activity className={`w-4 h-4 ${riskLevel.color}`} />
-          <span className={`text-sm font-semibold ${riskLevel.color}`}>{riskLevel.label}</span>
-        </div>
-      </div>
-
-      {/* Risk Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-background-secondary rounded-lg border border-border-color p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-text-muted">Daily P&L</span>
-            <DollarSign className={`w-4 h-4 ${dailyPnL >= 0 ? 'text-success-green' : 'text-warning-red'}`} />
-          </div>
-          <p className={`text-2xl font-bold ${dailyPnL >= 0 ? 'text-success-green' : 'text-warning-red'}`}>
-            ${dailyPnL.toFixed(2)}
-          </p>
-          <p className="text-xs text-text-muted mt-1">{dailyLossPercent.toFixed(2)}% of balance</p>
-          <div className="mt-2 h-1.5 bg-background-tertiary rounded-full overflow-hidden">
-            <div 
-              className={`h-full ${Math.abs(dailyLossPercent) >= riskLimits.maxRiskPerTradePct * 2 ? 'bg-warning-red' : 'bg-success-green'}`}
-              style={{ width: `${Math.min(Math.abs(dailyLossPercent) / riskLimits.maxDailyLoss * 100, 100)}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-background-secondary rounded-lg border border-border-color p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-text-muted">Drawdown</span>
-            <TrendingDown className={`w-4 h-4 ${drawdown > riskLimits.maxDrawdownPct ? 'text-warning-red' : 'text-gold-primary'}`} />
-          </div>
-          <p className={`text-2xl font-bold ${drawdown > riskLimits.maxDrawdownPct ? 'text-warning-red' : 'text-text-primary'}`}>
-            {drawdown.toFixed(2)}%
-          </p>
-          <p className="text-xs text-text-muted mt-1">Max: {riskLimits.maxDrawdownPct}%</p>
-          <div className="mt-2 h-1.5 bg-background-tertiary rounded-full overflow-hidden">
-            <div 
-              className={`h-full ${drawdown > riskLimits.maxDrawdownPct ? 'bg-warning-red' : 'bg-gold-primary'}`}
-              style={{ width: `${Math.min((drawdown / riskLimits.maxDrawdownPct) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-background-secondary rounded-lg border border-border-color p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-text-muted">Open Positions</span>
-            <Target className={`w-4 h-4 ${openPositionsCount >= riskLimits.maxConcurrentPositions ? 'text-warning-red' : 'text-success-green'}`} />
-          </div>
-          <p className={`text-2xl font-bold ${openPositionsCount >= riskLimits.maxConcurrentPositions ? 'text-warning-red' : 'text-text-primary'}`}>
-            {openPositionsCount}
-          </p>
-          <p className="text-xs text-text-muted mt-1">Max: {riskLimits.maxConcurrentPositions}</p>
-          <div className="mt-2 h-1.5 bg-background-tertiary rounded-full overflow-hidden">
-            <div 
-              className={`h-full ${openPositionsCount >= riskLimits.maxConcurrentPositions ? 'bg-warning-red' : 'bg-success-green'}`}
-              style={{ width: `${(openPositionsCount / riskLimits.maxConcurrentPositions) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-background-secondary rounded-lg border border-border-color p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-text-muted">Margin Level</span>
-            <Shield className={`w-4 h-4 ${(account?.marginLevel || 0) < 200 ? 'text-warning-red' : 'text-success-green'}`} />
-          </div>
-          <p className={`text-2xl font-bold ${(account?.marginLevel || 0) < 200 ? 'text-warning-red' : 'text-text-primary'}`}>
-            {account?.marginLevel?.toFixed(0) || 'N/A'}%
-          </p>
-          <p className="text-xs text-text-muted mt-1">Min safe: 200%</p>
-          <div className="mt-2 h-1.5 bg-background-tertiary rounded-full overflow-hidden">
-            <div 
-              className={`h-full ${(account?.marginLevel || 0) < 200 ? 'bg-warning-red' : 'bg-success-green'}`}
-              style={{ width: `${Math.min(((account?.marginLevel || 0) / 500) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Risk Warnings */}
-      {(Math.abs(dailyLossPercent) >= riskLimits.maxRiskPerTradePct * 2 || 
-        drawdown > riskLimits.maxDrawdownPct || 
-        openPositionsCount >= riskLimits.maxConcurrentPositions) && (
-        <div className="bg-warning-red/10 border border-warning-red/30 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning-red flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-warning-red mb-1">Risk Limits Exceeded</h3>
-              <ul className="text-sm text-text-secondary space-y-1">
-                {Math.abs(dailyLossPercent) >= riskLimits.maxRiskPerTradePct * 2 && (
-                  <li>• Daily loss exceeds maximum threshold</li>
-                )}
-                {drawdown > riskLimits.maxDrawdownPct && (
-                  <li>• Drawdown exceeds maximum allowed percentage</li>
-                )}
-                {openPositionsCount >= riskLimits.maxConcurrentPositions && (
-                  <li>• Maximum concurrent positions reached</li>
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Position Size Calculator */}
-      <Card className="border-border bg-card/50 backdrop-blur-sm">
+      {/* Portfolio Diversification */}
+      <PortfolioDiversification />
+      
+      {/* Risk Calculator */}
+      <Card className="bg-card border-border">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Calculator className="h-5 w-5 text-primary" />
