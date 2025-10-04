@@ -1,0 +1,32 @@
+{
+  "_comment": "Sentinel Gold Trader - Production Configuration",
+  
+  "mt5_login": 103936248,
+  "mt5_password": "YOUR_MT5_PASSWORD_HERE",
+  "mt5_server": "FBS-Demo",
+  
+  "alpha_vantage_api_key": "J71CYFEV8Y98T2EK",
+  "finnhub_api_key": "demo",
+  "polygon_api_key": "",
+  
+  "symbol": "XAUUSD",
+  "magic_number": 234000,
+  
+  "max_risk_per_trade": 0.02,
+  "max_positions": 3,
+  "max_daily_loss": 0.05,
+  "max_drawdown": 0.10,
+  
+  "min_lot_size": 0.01,
+  "max_lot_size": 10.0,
+  "default_sl_points": 10,
+  "default_tp_points": 20,
+  
+  "price_check_interval": 5,
+  
+  "trading_hours": {
+    "enabled": false,
+    "start": "00:00",
+    "end": "23:59"
+  }
+}

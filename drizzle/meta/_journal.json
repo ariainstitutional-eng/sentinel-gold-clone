@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1758760760676,
+      "tag": "0000_lucky_celestials",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1759586104202,
+      "tag": "0001_steep_mantis",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1759586120292,
+      "tag": "0002_medical_gorilla_man",
+      "breakpoints": true
+    }
+  ]
+}
