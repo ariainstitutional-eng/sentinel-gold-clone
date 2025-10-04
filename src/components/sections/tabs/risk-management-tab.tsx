@@ -12,7 +12,10 @@ import {
   TrendingDown,
   Calculator,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Loader2,
+  PieChart,
+  Target
 } from "lucide-react";
 import { toast } from "sonner";
 import { PortfolioDiversification } from "@/components/sections/portfolio-diversification";
