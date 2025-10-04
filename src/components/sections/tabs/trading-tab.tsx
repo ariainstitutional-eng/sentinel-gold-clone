@@ -51,8 +51,11 @@ export function TradingTab() {
   useEffect(() => {
     if (!tvLoaded || !chartContainerRef.current || widgetRef.current) return;
 
+    const container = chartContainerRef.current;
+    let widget: any = null;
+
     try {
-      widgetRef.current = new window.TradingView.widget({
+      widget = new window.TradingView.widget({
         autosize: true,
         symbol: "OANDA:XAUUSD",
         interval: "5",
@@ -64,7 +67,7 @@ export function TradingTab() {
         hide_top_toolbar: false,
         hide_legend: false,
         save_image: false,
-        container_id: chartContainerRef.current.id,
+        container_id: container.id,
         backgroundColor: "rgba(26, 27, 35, 0.5)",
         gridColor: "rgba(55, 65, 81, 0.3)",
         toolbar_bg: "#1a1b23",
@@ -90,15 +93,25 @@ export function TradingTab() {
           "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
         }
       });
+      
+      widgetRef.current = widget;
     } catch (error) {
       console.error("Failed to initialize TradingView widget:", error);
     }
 
     return () => {
-      if (widgetRef.current && widgetRef.current.remove) {
-        widgetRef.current.remove();
-        widgetRef.current = null;
+      // Safer cleanup - just clear the container instead of calling widget.remove()
+      try {
+        if (container && container.innerHTML) {
+          // Remove all child nodes manually
+          while (container.firstChild) {
+            container.removeChild(container.firstChild);
+          }
+        }
+      } catch (error) {
+        // Silently fail if cleanup errors occur
       }
+      widgetRef.current = null;
     };
   }, [tvLoaded]);
 

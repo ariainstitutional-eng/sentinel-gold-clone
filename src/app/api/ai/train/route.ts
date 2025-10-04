@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { models } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+import { MLTradingModel } from "@/lib/ml-model";
+import { Backtester } from "@/lib/backtester";
+import { TechnicalIndicators } from "@/lib/technical-indicators";
+import path from "path";
 
 // GET: Fetch all AI models
 export async function GET() {
@@ -18,12 +22,15 @@ export async function GET() {
         name: model.name,
         provider: model.provider,
         version: model.version,
-        strategy: hyperparams?.strategy || "unknown",
+        strategy: hyperparams?.strategy || "LSTM",
         symbol: hyperparams?.symbol || "XAUUSD",
         timeframe: hyperparams?.timeframe || "M5",
         status: model.status,
-        accuracy: hyperparams?.accuracy ? hyperparams.accuracy * 100 : 0,
+        accuracy: hyperparams?.metrics?.accuracy ? hyperparams.metrics.accuracy * 100 : 0,
+        winRate: hyperparams?.metrics?.winRate ? hyperparams.metrics.winRate * 100 : 0,
+        profitability: hyperparams?.metrics?.profitability ? hyperparams.metrics.profitability * 100 : 0,
         trainingData: hyperparams?.trainingData || null,
+        backtestResults: hyperparams?.backtestResults || null,
         isActive: model.status === "active",
         createdAt: model.createdAt,
         updatedAt: model.updatedAt,
@@ -43,10 +50,10 @@ export async function GET() {
   }
 }
 
-// POST: Start training a new model
+// POST: Start training a new model with REAL ML
 export async function POST(req: NextRequest) {
   try {
-    const body: TrainingRequest = await req.json();
+    const body = await req.json();
 
     // Validate required fields
     if (!body.modelName || !body.symbol || !body.timeframe || !body.fromDate || !body.toDate) {
@@ -59,17 +66,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Default training parameters
+    // Training parameters
     const trainingParams = {
       learningRate: body.parameters?.learningRate || 0.001,
-      epochs: body.parameters?.epochs || 100,
+      epochs: body.parameters?.epochs || 50,
       batchSize: body.parameters?.batchSize || 32,
       validationSplit: body.parameters?.validationSplit || 0.2,
+      sequenceLength: body.parameters?.sequenceLength || 60,
+      lstmUnits: body.parameters?.lstmUnits || [128, 64, 32],
+      dropout: body.parameters?.dropout || 0.2,
     };
 
     // Step 1: Fetch historical data
     console.log(`Fetching historical data for ${body.symbol} ${body.timeframe}...`);
-    const historicalDataUrl = `${req.nextUrl.origin}/api/mt5/historical-data?symbol=${body.symbol}&timeframe=${body.timeframe}&from=${body.fromDate}&to=${body.toDate}`;
+    const historicalDataUrl = `${req.nextUrl.origin}/api/mt5/historical-data?symbol=${body.symbol}&timeframe=${body.timeframe}&limit=5000`;
     
     const historicalResponse = await fetch(historicalDataUrl);
     
@@ -96,81 +106,40 @@ export async function POST(req: NextRequest) {
       .insert(models)
       .values({
         name: body.modelName,
-        provider: "MT5-AI",
+        provider: "LSTM-AI",
         version: "1.0.0",
-        description: `${body.strategy} model trained on ${body.symbol} ${body.timeframe} data`,
-        strategy: body.strategy,
-        symbol: body.symbol,
-        timeframe: body.timeframe,
-        status: "training",
-        accuracy: 0,
-        trainingData: JSON.stringify({
-          fromDate: body.fromDate,
-          toDate: body.toDate,
-          barCount: historicalData.bars.length,
+        description: `LSTM model trained on ${body.symbol} ${body.timeframe} data`,
+        hyperparams: JSON.stringify({
+          strategy: body.strategy || "LSTM",
+          symbol: body.symbol,
+          timeframe: body.timeframe,
           parameters: trainingParams,
+          trainingData: {
+            fromDate: body.fromDate,
+            toDate: body.toDate,
+            barCount: historicalData.bars.length,
+          },
         }),
-        isActive: false,
+        status: "training",
         createdAt: Date.now(),
         updatedAt: Date.now(),
       })
       .returning();
 
-    // Step 3: In production, this would trigger async training job
-    // For now, simulate training process
-    console.log(`Starting training for model ${newModel.id}...`);
+    // Step 3: Start REAL training (async)
+    console.log(`Starting REAL LSTM training for model ${newModel.id}...`);
 
-    // Simulate async training (in production, use queue/worker)
-    setTimeout(async () => {
-      try {
-        // Simulate training completion with realistic metrics
-        const trainingMetrics = {
-          accuracy: 0.75 + Math.random() * 0.15, // 75-90%
-          precision: 0.70 + Math.random() * 0.15,
-          recall: 0.68 + Math.random() * 0.15,
-          f1Score: 0.72 + Math.random() * 0.13,
-          loss: 0.15 + Math.random() * 0.1,
-          valLoss: 0.18 + Math.random() * 0.12,
-        };
+    // Start training in background
+    trainModelAsync(newModel.id, historicalData.bars, trainingParams, body.symbol, body.timeframe).catch((error) => {
+      console.error(`Training failed for model ${newModel.id}:`, error);
+    });
 
-        await db
-          .update(models)
-          .set({
-            status: "trained",
-            accuracy: parseFloat((trainingMetrics.accuracy * 100).toFixed(2)),
-            trainingData: JSON.stringify({
-              fromDate: body.fromDate,
-              toDate: body.toDate,
-              barCount: historicalData.bars.length,
-              parameters: trainingParams,
-              metrics: trainingMetrics,
-              completedAt: new Date().toISOString(),
-            }),
-            updatedAt: new Date(),
-          })
-          .where(eq(models.id, newModel.id));
-
-        console.log(`Training completed for model ${newModel.id}`);
-      } catch (error) {
-        console.error(`Training failed for model ${newModel.id}:`, error);
-        await db
-          .update(models)
-          .set({
-            status: "failed",
-            updatedAt: new Date(),
-          })
-          .where(eq(models.id, newModel.id));
-      }
-    }, 5000); // Simulate 5s training time
-
-    const response: TrainingResponse = {
+    return NextResponse.json({
       success: true,
       modelId: newModel.id.toString(),
       status: "training",
-      message: `Model training started for ${body.modelName}. Training with ${historicalData.bars.length} historical bars.`,
-    };
-
-    return NextResponse.json(response);
+      message: `Real LSTM training started for ${body.modelName} with ${historicalData.bars.length} historical bars.`,
+    });
   } catch (error) {
     console.error("AI training error:", error);
     return NextResponse.json(
@@ -180,5 +149,139 @@ export async function POST(req: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Train model asynchronously
+ */
+async function trainModelAsync(
+  modelId: number,
+  bars: any[],
+  trainingParams: any,
+  symbol: string,
+  timeframe: string
+) {
+  try {
+    console.log(`[Model ${modelId}] Starting real ML training...`);
+
+    // Convert bars to OHLCVData format
+    const trainingData = bars.map((bar) => ({
+      time: bar.timestamp,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume || 0,
+    }));
+
+    // Initialize ML model
+    const mlModel = new MLTradingModel({
+      sequenceLength: trainingParams.sequenceLength,
+      epochs: trainingParams.epochs,
+      batchSize: trainingParams.batchSize,
+      learningRate: trainingParams.learningRate,
+      validationSplit: trainingParams.validationSplit,
+      lstmUnits: trainingParams.lstmUnits,
+      dropout: trainingParams.dropout,
+    });
+
+    // Train model with progress logging
+    const metrics = await mlModel.train(trainingData, (epoch, logs) => {
+      if (epoch % 10 === 0) {
+        console.log(`[Model ${modelId}] Epoch ${epoch}: loss=${logs?.loss.toFixed(4)}, acc=${logs?.acc.toFixed(4)}`);
+      }
+    });
+
+    console.log(`[Model ${modelId}] Training complete! Accuracy: ${(metrics.accuracy * 100).toFixed(2)}%`);
+
+    // Save model
+    const modelPath = path.join(process.cwd(), 'models', `model_${modelId}`);
+    await mlModel.save(modelPath);
+
+    // Run backtest
+    console.log(`[Model ${modelId}] Running backtest...`);
+    const backtester = new Backtester({
+      initialCapital: 10000,
+      riskPerTrade: 0.02,
+      commission: 2,
+      slippage: 0.5,
+      maxPositions: 3,
+    });
+
+    // Generate signals using indicators
+    const backtestResults = backtester.run(trainingData, (data, index) => {
+      if (data.length < 100) return null;
+
+      const indicators = TechnicalIndicators.calculateAllIndicators(data.slice(Math.max(0, index - 100), index + 1));
+      const signals = TechnicalIndicators.generateSignals(data.slice(Math.max(0, index - 100), index + 1), indicators);
+      const lastSignal = signals[signals.length - 1];
+
+      if (lastSignal && lastSignal.signal !== 'HOLD' && lastSignal.strength > 0.5) {
+        const currentBar = data[index];
+        const atr = indicators[indicators.length - 1]?.atr || 10;
+
+        return {
+          signal: lastSignal.signal,
+          stopLoss: lastSignal.signal === 'BUY' ? currentBar.close - atr * 2 : currentBar.close + atr * 2,
+          takeProfit: lastSignal.signal === 'BUY' ? currentBar.close + atr * 4 : currentBar.close - atr * 4,
+        };
+      }
+
+      return null;
+    });
+
+    console.log(`[Model ${modelId}] Backtest complete! Win Rate: ${backtestResults.winRate.toFixed(2)}%, Net Profit: $${backtestResults.netProfit.toFixed(2)}`);
+
+    // Update model in database
+    await db
+      .update(models)
+      .set({
+        status: "active",
+        hyperparams: JSON.stringify({
+          strategy: "LSTM",
+          symbol,
+          timeframe,
+          parameters: trainingParams,
+          metrics: {
+            accuracy: metrics.accuracy,
+            precision: metrics.precision,
+            recall: metrics.recall,
+            f1Score: metrics.f1Score,
+            loss: metrics.loss,
+            valLoss: metrics.valLoss,
+            winRate: metrics.winRate,
+            profitability: metrics.profitability,
+          },
+          backtestResults: {
+            totalTrades: backtestResults.totalTrades,
+            winRate: backtestResults.winRate,
+            netProfit: backtestResults.netProfit,
+            netProfitPercentage: backtestResults.netProfitPercentage,
+            profitFactor: backtestResults.profitFactor,
+            sharpeRatio: backtestResults.sharpeRatio,
+            maxDrawdown: backtestResults.maxDrawdown,
+            maxDrawdownPercentage: backtestResults.maxDrawdownPercentage,
+          },
+          trainingData: {
+            barCount: bars.length,
+            completedAt: new Date().toISOString(),
+          },
+          modelPath,
+        }),
+        updatedAt: Date.now(),
+      })
+      .where(eq(models.id, modelId));
+
+    console.log(`[Model ${modelId}] Training pipeline complete!`);
+  } catch (error) {
+    console.error(`[Model ${modelId}] Training failed:`, error);
+    await db
+      .update(models)
+      .set({
+        status: "failed",
+        updatedAt: Date.now(),
+      })
+      .where(eq(models.id, modelId));
   }
 }

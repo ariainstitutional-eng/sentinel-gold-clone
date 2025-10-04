@@ -1,43 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { systemStatus } from '@/db/schema';
-import { desc } from 'drizzle-orm';
+import { NextRequest, NextResponse } from "next/server";
+import { SystemMetricsCollector } from "@/lib/system-metrics";
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    // Optional bearer token logging
-    const authHeader = request.headers.get('authorization');
-    if (authHeader) {
-      console.log('Request with bearer token received');
-    }
+    // Collect REAL system metrics
+    const metrics = await SystemMetricsCollector.collect();
 
-    // Get the latest system status record
-    const latestStatus = await db.select()
-      .from(systemStatus)
-      .orderBy(desc(systemStatus.id))
-      .limit(1);
-
-    // If no status exists, return default values
-    if (latestStatus.length === 0) {
-      const defaultStatus = {
-        id: null,
-        mt5Connected: false,
-        aiActive: false,
-        riskMonitorActive: true,
-        degradedMode: false,
-        lastHeartbeat: Math.floor(Date.now() / 1000)
-      };
-      
-      return NextResponse.json(defaultStatus, { status: 200 });
-    }
-
-    // Return the latest status record
-    return NextResponse.json(latestStatus[0], { status: 200 });
-
-  } catch (error) {
-    console.error('GET error:', error);
-    return NextResponse.json({ 
-      error: 'Internal server error: ' + error 
-    }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      metrics: {
+        cpu: {
+          usage: metrics.cpu.usage.toFixed(2),
+          cores: metrics.cpu.cores,
+          speed: metrics.cpu.speed.toFixed(2),
+          temperature: metrics.cpu.temperature > 0 ? metrics.cpu.temperature.toFixed(1) : "N/A",
+        },
+        memory: {
+          total: SystemMetricsCollector.formatBytes(metrics.memory.total),
+          used: SystemMetricsCollector.formatBytes(metrics.memory.used),
+          free: SystemMetricsCollector.formatBytes(metrics.memory.free),
+          percentage: metrics.memory.percentage.toFixed(2),
+        },
+        network: {
+          rx: SystemMetricsCollector.formatBytes(metrics.network.rx) + "/s",
+          tx: SystemMetricsCollector.formatBytes(metrics.network.tx) + "/s",
+          latency: metrics.network.latency > 0 ? `${metrics.network.latency}ms` : "N/A",
+        },
+        disk: {
+          total: SystemMetricsCollector.formatBytes(metrics.disk.total),
+          used: SystemMetricsCollector.formatBytes(metrics.disk.used),
+          free: SystemMetricsCollector.formatBytes(metrics.disk.free),
+          percentage: metrics.disk.percentage.toFixed(2),
+        },
+        process: {
+          cpu: metrics.process.cpu.toFixed(2),
+          memory: metrics.process.memory.toFixed(2),
+          uptime: SystemMetricsCollector.formatUptime(metrics.process.uptime),
+        },
+      },
+      timestamp: metrics.timestamp,
+    });
+  } catch (error: any) {
+    console.error("Error fetching system status:", error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
