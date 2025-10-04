@@ -94,9 +94,10 @@ export function PerformanceTab() {
         ]);
         
         if (mounted) {
-          setPositions(posData);
-          setJournal(journalData || []);
-          setMetrics(metricsData || []);
+          // Ensure positions is always an array
+          setPositions(Array.isArray(posData) ? posData : []);
+          setJournal(Array.isArray(journalData) ? journalData : []);
+          setMetrics(Array.isArray(metricsData) ? metricsData : []);
         }
       } catch (error) {
         console.error("Failed to load performance data:", error);
