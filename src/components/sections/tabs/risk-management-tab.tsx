@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Shield, AlertTriangle, TrendingDown, Activity, DollarSign, Target } from "lucide-react";
+import { Shield, AlertTriangle, TrendingDown, Activity, DollarSign, Target, Calculator, PieChart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface RiskLimits {
   maxDailyLoss: number;
@@ -28,6 +32,15 @@ interface Account {
   marginLevel: number | null;
 }
 
+interface DrawdownData {
+  timestamp: number;
+  equityPeak: number;
+  currentEquity: number;
+  drawdownPct: number;
+  drawdownAmount: number;
+  recovered: boolean;
+}
+
 export function RiskManagementTab() {
   const [riskLimits, setRiskLimits] = useState<RiskLimits>({
     maxDailyLoss: 500,
@@ -41,6 +54,9 @@ export function RiskManagementTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dailyPnL, setDailyPnL] = useState(0);
+  const [drawdownHistory, setDrawdownHistory] = useState<DrawdownData[]>([]);
+  const [positionSize, setPositionSize] = useState({ accountSize: 10000, riskPercent: 2, stopLoss: 50 });
+  const [calculatedSize, setCalculatedSize] = useState(0);
 
   const loadData = async () => {
     try {
@@ -72,6 +88,11 @@ export function RiskManagementTab() {
       if (riskData.success && riskData.limits) {
         setRiskLimits(riskData.limits);
       }
+
+      // Load drawdown history
+      const drawdownRes = await fetch("/api/drawdown-history?limit=30&sort=timestamp&order=desc");
+      const drawdownData = await drawdownRes.json();
+      setDrawdownHistory(drawdownData || []);
     } catch (error) {
       console.error("Failed to load risk data:", error);
       const errorMsg = error instanceof Error ? error.message : "Failed to load risk data";
@@ -88,6 +109,17 @@ export function RiskManagementTab() {
     return () => clearInterval(interval);
   }, []);
 
+  // Calculate position size
+  const calculatePositionSize = () => {
+    const riskAmount = (positionSize.accountSize * positionSize.riskPercent) / 100;
+    const size = riskAmount / positionSize.stopLoss;
+    setCalculatedSize(size);
+  };
+
+  useEffect(() => {
+    calculatePositionSize();
+  }, [positionSize]);
+
   const drawdown = account ? ((account.balance - account.equity) / account.balance) * 100 : 0;
   const dailyLossPercent = account ? (dailyPnL / account.balance) * 100 : 0;
   const openPositionsCount = positions.filter(p => p.status === "open").length;
@@ -103,7 +135,7 @@ export function RiskManagementTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-10 h-10 border-2 border-gold-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
       </div>
     );
   }
@@ -225,6 +257,163 @@ export function RiskManagementTab() {
           </div>
         </div>
       )}
+
+      {/* Position Size Calculator */}
+      <Card className="border-border bg-card/50 backdrop-blur-sm">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Calculator className="h-5 w-5 text-primary" />
+            <CardTitle>Position Size Calculator</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <Label htmlFor="accountSize">Account Size ($)</Label>
+              <Input
+                id="accountSize"
+                type="number"
+                value={positionSize.accountSize}
+                onChange={(e) => setPositionSize({...positionSize, accountSize: parseFloat(e.target.value) || 0})}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="riskPercent">Risk Per Trade (%)</Label>
+              <Input
+                id="riskPercent"
+                type="number"
+                step="0.1"
+                value={positionSize.riskPercent}
+                onChange={(e) => setPositionSize({...positionSize, riskPercent: parseFloat(e.target.value) || 0})}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="stopLoss">Stop Loss (pips)</Label>
+              <Input
+                id="stopLoss"
+                type="number"
+                value={positionSize.stopLoss}
+                onChange={(e) => setPositionSize({...positionSize, stopLoss: parseFloat(e.target.value) || 0})}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+            <p className="text-sm text-muted-foreground mb-1">Recommended Position Size</p>
+            <p className="text-3xl font-bold text-primary">{calculatedSize.toFixed(2)} lots</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Risk Amount: ${((positionSize.accountSize * positionSize.riskPercent) / 100).toFixed(2)}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Drawdown Monitor */}
+      <Card className="border-border bg-card/50 backdrop-blur-sm">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <TrendingDown className="h-5 w-5 text-warning-red" />
+            <CardTitle>Drawdown Monitor</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {drawdownHistory.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <TrendingDown className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p>No drawdown history available</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="bg-background-tertiary rounded-lg p-3 border border-border">
+                  <p className="text-xs text-muted-foreground mb-1">Peak Equity</p>
+                  <p className="text-xl font-bold text-success-green">
+                    ${drawdownHistory[0]?.equityPeak.toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-background-tertiary rounded-lg p-3 border border-border">
+                  <p className="text-xs text-muted-foreground mb-1">Current Equity</p>
+                  <p className="text-xl font-bold text-foreground">
+                    ${drawdownHistory[0]?.currentEquity.toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-background-tertiary rounded-lg p-3 border border-border">
+                  <p className="text-xs text-muted-foreground mb-1">Current Drawdown</p>
+                  <p className={`text-xl font-bold ${drawdownHistory[0]?.drawdownPct > 5 ? 'text-warning-red' : 'text-gold-primary'}`}>
+                    {drawdownHistory[0]?.drawdownPct.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {drawdownHistory.slice(0, 10).map((dd) => (
+                  <div key={dd.timestamp} className="flex items-center justify-between bg-background-tertiary rounded p-3 border border-border">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {new Date(dd.timestamp).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Equity: ${dd.currentEquity.toFixed(2)} / Peak: ${dd.equityPeak.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-lg font-bold ${dd.drawdownPct > 5 ? 'text-warning-red' : 'text-gold-primary'}`}>
+                        {dd.drawdownPct.toFixed(2)}%
+                      </p>
+                      {dd.recovered && (
+                        <span className="text-xs text-success-green">✓ Recovered</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Portfolio Risk Analysis */}
+      <Card className="border-border bg-card/50 backdrop-blur-sm">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <PieChart className="h-5 w-5 text-accent-purple" />
+            <CardTitle>Portfolio Risk Analysis</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Exposure per Symbol</span>
+            </div>
+            {positions.filter(p => p.status === "open").length === 0 ? (
+              <p className="text-center text-muted-foreground py-4">No open positions</p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(
+                  positions
+                    .filter(p => p.status === "open")
+                    .reduce((acc, p) => {
+                      acc[p.symbol] = (acc[p.symbol] || 0) + p.volume;
+                      return acc;
+                    }, {} as Record<string, number>)
+                ).map(([symbol, volume]) => (
+                  <div key={symbol} className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground w-24">{symbol}</span>
+                    <div className="flex-1 h-6 bg-background-tertiary rounded-full overflow-hidden border border-border">
+                      <div 
+                        className="h-full bg-primary"
+                        style={{ width: `${(volume / positions.reduce((sum, p) => sum + p.volume, 0)) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-muted-foreground w-16 text-right">{volume.toFixed(2)} lots</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Active Positions */}
       <div className="bg-background-secondary rounded-lg border border-border-color">

@@ -149,3 +149,67 @@ export const systemStatus = sqliteTable('system_status', {
   degradedMode: integer('degraded_mode', { mode: 'boolean' }).notNull().default(false),
   lastHeartbeat: integer('last_heartbeat').notNull(),
 });
+
+// Auto trading configuration
+export const autoTradingConfig = sqliteTable('auto_trading_config', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  maxDailyTrades: integer('max_daily_trades').notNull().default(10),
+  maxDailyLoss: real('max_daily_loss').notNull().default(500.0),
+  maxPositionSize: real('max_position_size').notNull().default(1.0),
+  emergencyStopLoss: integer('emergency_stop_loss', { mode: 'boolean' }).notNull().default(true),
+  tradingHoursStart: text('trading_hours_start').notNull().default('00:00'),
+  tradingHoursEnd: text('trading_hours_end').notNull().default('23:59'),
+  allowedSymbols: text('allowed_symbols', { mode: 'json' }).notNull().default(JSON.stringify(['XAUUSD'])),
+  minConfidenceThreshold: real('min_confidence_threshold').notNull().default(0.7),
+  riskPerTrade: real('risk_per_trade').notNull().default(1.0),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Performance metrics tracking
+export const performanceMetrics = sqliteTable('performance_metrics', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: integer('date').notNull(),
+  totalTrades: integer('total_trades').notNull().default(0),
+  winningTrades: integer('winning_trades').notNull().default(0),
+  losingTrades: integer('losing_trades').notNull().default(0),
+  totalPnL: real('total_pnl').notNull().default(0.0),
+  winRate: real('win_rate').notNull().default(0.0),
+  avgWin: real('avg_win').notNull().default(0.0),
+  avgLoss: real('avg_loss').notNull().default(0.0),
+  profitFactor: real('profit_factor').notNull().default(0.0),
+  sharpeRatio: real('sharpe_ratio').notNull().default(0.0),
+  maxDrawdown: real('max_drawdown').notNull().default(0.0),
+  equity: real('equity').notNull().default(0.0),
+  createdAt: integer('created_at').notNull(),
+});
+
+// Trade journal for detailed trade analysis
+export const tradeJournal = sqliteTable('trade_journal', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  positionId: integer('position_id').references(() => positions.id),
+  symbol: text('symbol').notNull().default('XAUUSD'),
+  side: text('side').notNull(),
+  entryPrice: real('entry_price').notNull(),
+  exitPrice: real('exit_price'),
+  volume: real('volume').notNull(),
+  pnl: real('pnl'),
+  duration: integer('duration'),
+  strategy: text('strategy'),
+  notes: text('notes'),
+  sentiment: text('sentiment').notNull().default('neutral'),
+  openedAt: integer('opened_at').notNull(),
+  closedAt: integer('closed_at'),
+});
+
+// Drawdown tracking for risk management
+export const drawdownHistory = sqliteTable('drawdown_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  timestamp: integer('timestamp').notNull(),
+  equityPeak: real('equity_peak').notNull(),
+  currentEquity: real('current_equity').notNull(),
+  drawdownPct: real('drawdown_pct').notNull(),
+  drawdownAmount: real('drawdown_amount').notNull(),
+  recovered: integer('recovered', { mode: 'boolean' }).notNull().default(false),
+});
