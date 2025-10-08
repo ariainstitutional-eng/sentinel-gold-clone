@@ -70,13 +70,10 @@ export async function GET(request: NextRequest) {
       ? new Date(from)
       : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000); // Default: 30 days
 
-    // In production, this would call the MT5 Python bridge
-    // For now, we'll simulate the API structure with proper error handling
-    
+    // Call MT5 Python bridge for real historical data
     const MT5_BRIDGE_URL = process.env.MT5_BRIDGE_URL || "http://localhost:8000";
     
     try {
-      // Attempt to fetch from MT5 bridge
       const response = await fetch(
         `${MT5_BRIDGE_URL}/historical-data?symbol=${symbol}&timeframe=${timeframe}&from=${fromDate.toISOString()}&to=${toDate.toISOString()}&limit=${limit}`,
         {
@@ -99,63 +96,21 @@ export async function GET(request: NextRequest) {
           from: fromDate.toISOString(),
           to: toDate.toISOString(),
         });
+      } else {
+        const errorText = await response.text();
+        throw new Error(`MT5 bridge returned ${response.status}: ${errorText}`);
       }
     } catch (bridgeError) {
-      console.warn("MT5 bridge unavailable, using fallback:", bridgeError);
+      console.error("MT5 bridge error:", bridgeError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `MT5 bridge unavailable: ${bridgeError instanceof Error ? bridgeError.message : String(bridgeError)}. Please ensure MT5 Python bridge is running at ${MT5_BRIDGE_URL}`,
+          code: "MT5_BRIDGE_UNAVAILABLE"
+        },
+        { status: 503 }
+      );
     }
-
-    // Fallback: Generate realistic historical data for development/testing
-    // In production, this should be replaced with actual MT5 data
-    const bars: OHLCVBar[] = [];
-    const timeframeMinutes = TIMEFRAME_MAP[timeframe];
-    const barCount = Math.min(
-      limit,
-      Math.floor((toDate.getTime() - fromDate.getTime()) / (timeframeMinutes * 60 * 1000))
-    );
-
-    let currentTime = fromDate.getTime();
-    let basePrice = symbol === "XAUUSD" ? 2050 : 1.0850; // Realistic base prices
-    
-    for (let i = 0; i < barCount; i++) {
-      // Generate realistic OHLCV with proper market behavior
-      const volatility = 0.0005 + Math.random() * 0.001;
-      const trend = (Math.random() - 0.48) * 0.0003; // Slight upward bias
-      
-      const open = basePrice;
-      const change = basePrice * (trend + (Math.random() - 0.5) * volatility);
-      const close = open + change;
-      
-      const high = Math.max(open, close) + Math.abs(change) * Math.random() * 0.5;
-      const low = Math.min(open, close) - Math.abs(change) * Math.random() * 0.5;
-      
-      const volume = Math.floor(100 + Math.random() * 900);
-      const spread = Math.floor(2 + Math.random() * 3);
-
-      bars.push({
-        timestamp: currentTime,
-        open: parseFloat(open.toFixed(symbol === "XAUUSD" ? 2 : 5)),
-        high: parseFloat(high.toFixed(symbol === "XAUUSD" ? 2 : 5)),
-        low: parseFloat(low.toFixed(symbol === "XAUUSD" ? 2 : 5)),
-        close: parseFloat(close.toFixed(symbol === "XAUUSD" ? 2 : 5)),
-        volume,
-        spread,
-      });
-
-      basePrice = close;
-      currentTime += timeframeMinutes * 60 * 1000;
-    }
-
-    const response: MT5HistoricalResponse = {
-      success: true,
-      symbol,
-      timeframe,
-      bars,
-      count: bars.length,
-      from: fromDate.toISOString(),
-      to: toDate.toISOString(),
-    };
-
-    return NextResponse.json(response);
   } catch (error) {
     console.error("MT5 historical data error:", error);
     return NextResponse.json(
