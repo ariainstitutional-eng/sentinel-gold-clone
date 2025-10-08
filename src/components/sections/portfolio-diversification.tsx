@@ -35,29 +35,44 @@ export function PortfolioDiversification() {
       
       const data = await response.json();
       
+      // Handle different API response formats
+      const positionsArray = data.success && Array.isArray(data.positions) 
+        ? data.positions 
+        : Array.isArray(data) 
+        ? data 
+        : [];
+      
       // Process positions by symbol
       const positionMap = new Map<string, { exposure: number; pnl: number }>();
       let total = 0;
       
-      data.forEach((pos: any) => {
-        const exposure = Math.abs(pos.volume || 0) * (pos.openPrice || 0);
-        const pnl = pos.profit || 0;
-        total += exposure;
-        
-        if (positionMap.has(pos.symbol)) {
-          const existing = positionMap.get(pos.symbol)!;
-          existing.exposure += exposure;
-          existing.pnl += pnl;
-        } else {
-          positionMap.set(pos.symbol, { exposure, pnl });
-        }
-      });
+      positionsArray
+        .filter((pos: any) => pos.status === "open")
+        .forEach((pos: any) => {
+          const exposure = Math.abs(pos.volume || 0) * (pos.entryPrice || pos.openPrice || 0);
+          const pnl = pos.pnl || pos.profit || 0;
+          total += exposure;
+          
+          if (positionMap.has(pos.symbol)) {
+            const existing = positionMap.get(pos.symbol)!;
+            existing.exposure += exposure;
+            existing.pnl += pnl;
+          } else {
+            positionMap.set(pos.symbol, { exposure, pnl });
+          }
+        });
       
       setTotalExposure(total);
       
       // Convert to position data array
-      const positionsArray: PositionData[] = Array.from(positionMap.entries()).map(([symbol, data]) => {
-        const symbolData = SYMBOLS.find(s => s.id === symbol) || SYMBOLS[0];
+      const processedPositions: PositionData[] = Array.from(positionMap.entries()).map(([symbol, data]) => {
+        const symbolData = SYMBOLS.find(s => s.id === symbol) || {
+          id: symbol,
+          displayName: symbol,
+          category: "forex" as const,
+          tvSymbol: symbol,
+          precision: 2
+        };
         const percentage = total > 0 ? (data.exposure / total) * 100 : 0;
         
         // Determine risk level based on exposure percentage
@@ -77,69 +92,18 @@ export function PortfolioDiversification() {
       });
       
       // Sort by exposure descending
-      positionsArray.sort((a, b) => b.exposure - a.exposure);
+      processedPositions.sort((a, b) => b.exposure - a.exposure);
       
-      setPositions(positionsArray);
+      setPositions(processedPositions);
     } catch (error) {
       console.error("Failed to fetch positions:", error);
       toast.error("Failed to load portfolio data");
-      // Generate mock data for demonstration
-      generateMockPositions();
+      // Set empty positions on error
+      setPositions([]);
+      setTotalExposure(0);
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateMockPositions = () => {
-    const mockPositions: PositionData[] = [
-      {
-        symbol: "XAUUSD",
-        symbolName: "Gold/USD",
-        category: "forex",
-        exposure: 50000,
-        pnl: 1250,
-        percentage: 35,
-        risk: "medium",
-      },
-      {
-        symbol: "BTCUSD",
-        symbolName: "Bitcoin",
-        category: "crypto",
-        exposure: 30000,
-        pnl: -450,
-        percentage: 21,
-        risk: "low",
-      },
-      {
-        symbol: "EURUSD",
-        symbolName: "EUR/USD",
-        category: "forex",
-        exposure: 25000,
-        pnl: 680,
-        percentage: 17.5,
-        risk: "low",
-      },
-      {
-        symbol: "AAPL",
-        symbolName: "Apple Inc.",
-        category: "stocks",
-        exposure: 20000,
-        pnl: 320,
-        percentage: 14,
-        risk: "low",
-      },
-      {
-        symbol: "XAGUSD",
-        symbolName: "Silver/USD",
-        category: "metals",
-        exposure: 17500,
-        pnl: -120,
-        percentage: 12.5,
-        risk: "low",
-      },
-    ];
-    setPositions(mockPositions);
-    setTotalExposure(142500);
   };
 
   // Calculate category distribution
@@ -203,25 +167,27 @@ export function PortfolioDiversification() {
         </div>
 
         {/* Category Distribution */}
-        <div className="rounded-lg border border-border bg-background-secondary p-4">
-          <h4 className="text-sm font-semibold text-foreground mb-3">Asset Category Breakdown</h4>
-          <div className="space-y-2">
-            {Object.entries(categoryDistribution).map(([category, percentage]) => (
-              <div key={category}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-foreground capitalize">{category}</span>
-                  <span className="text-xs font-bold text-primary">{percentage.toFixed(1)}%</span>
+        {Object.keys(categoryDistribution).length > 0 && (
+          <div className="rounded-lg border border-border bg-background-secondary p-4">
+            <h4 className="text-sm font-semibold text-foreground mb-3">Asset Category Breakdown</h4>
+            <div className="space-y-2">
+              {Object.entries(categoryDistribution).map(([category, percentage]) => (
+                <div key={category}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-foreground capitalize">{category}</span>
+                    <span className="text-xs font-bold text-primary">{percentage.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-background-tertiary overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 rounded-full bg-background-tertiary overflow-hidden">
-                  <div 
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Individual Positions */}
         <div className="space-y-2">

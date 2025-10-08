@@ -36,6 +36,101 @@ const TIMEFRAMES = [
   { id: "1d", label: "Daily", interval: 1440 },
 ];
 
+// Calculate RSI from price data
+function calculateRSI(prices: number[], period: number = 14): number {
+  if (prices.length < period + 1) return 50;
+  
+  const changes = [];
+  for (let i = 1; i < prices.length; i++) {
+    changes.push(prices[i] - prices[i - 1]);
+  }
+  
+  let gains = 0;
+  let losses = 0;
+  
+  for (let i = 0; i < period; i++) {
+    if (changes[i] > 0) gains += changes[i];
+    else losses += Math.abs(changes[i]);
+  }
+  
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  
+  if (avgLoss === 0) return 100;
+  
+  const rs = avgGain / avgLoss;
+  const rsi = 100 - (100 / (1 + rs));
+  
+  return rsi;
+}
+
+// Calculate EMA
+function calculateEMA(prices: number[], period: number): number[] {
+  const k = 2 / (period + 1);
+  const ema = [prices[0]];
+  
+  for (let i = 1; i < prices.length; i++) {
+    ema.push(prices[i] * k + ema[i - 1] * (1 - k));
+  }
+  
+  return ema;
+}
+
+// Calculate MACD
+function calculateMACD(prices: number[]): { value: number; signal: string } {
+  if (prices.length < 26) return { value: 0, signal: "N/A" };
+  
+  const ema12 = calculateEMA(prices, 12);
+  const ema26 = calculateEMA(prices, 26);
+  
+  const macdLine = ema12[ema12.length - 1] - ema26[ema26.length - 1];
+  const signal = macdLine > 0 ? "Bullish" : "Bearish";
+  
+  return { value: macdLine, signal };
+}
+
+// Detect trend using moving averages
+function detectTrend(prices: number[]): string {
+  if (prices.length < 20) return "N/A";
+  
+  const sma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  const currentPrice = prices[prices.length - 1];
+  
+  if (currentPrice > sma20 * 1.005) return "Uptrend";
+  if (currentPrice < sma20 * 0.995) return "Downtrend";
+  return "Sideways";
+}
+
+// Generate trading signal
+function generateSignal(rsi: number, macd: string, trend: string): { direction: "buy" | "sell" | "hold"; confidence: number } {
+  let buyScore = 0;
+  let sellScore = 0;
+  
+  // RSI analysis
+  if (rsi < 30) buyScore += 30;
+  else if (rsi < 40) buyScore += 15;
+  else if (rsi > 70) sellScore += 30;
+  else if (rsi > 60) sellScore += 15;
+  
+  // MACD analysis
+  if (macd === "Bullish") buyScore += 25;
+  else if (macd === "Bearish") sellScore += 25;
+  
+  // Trend analysis
+  if (trend === "Uptrend") buyScore += 20;
+  else if (trend === "Downtrend") sellScore += 20;
+  
+  const totalScore = buyScore + sellScore;
+  
+  if (buyScore > sellScore && buyScore >= 40) {
+    return { direction: "buy", confidence: Math.min(buyScore / 75, 0.95) };
+  } else if (sellScore > buyScore && sellScore >= 40) {
+    return { direction: "sell", confidence: Math.min(sellScore / 75, 0.95) };
+  }
+  
+  return { direction: "hold", confidence: 0.3 + (Math.random() * 0.2) };
+}
+
 export function MultiTimeframeAnalysis({ symbol }: MultiTimeframeAnalysisProps) {
   const [signals, setSignals] = useState<TimeframeSignal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,35 +152,42 @@ export function MultiTimeframeAnalysis({ symbol }: MultiTimeframeAnalysisProps) 
           
           const data = await response.json();
           
-          // Simulate technical analysis
-          const latestPrice = data.current?.price || 2000;
-          const rsi = 45 + Math.random() * 20;
-          const macdPositive = Math.random() > 0.5;
-          const trendUp = Math.random() > 0.5;
+          // Extract price data
+          let prices: number[] = [];
+          let latestPrice = 0;
           
-          let direction: "buy" | "sell" | "hold" = "hold";
-          let confidence = 0.5;
-          
-          if (rsi < 40 && macdPositive && trendUp) {
-            direction = "buy";
-            confidence = 0.65 + Math.random() * 0.25;
-          } else if (rsi > 60 && !macdPositive && !trendUp) {
-            direction = "sell";
-            confidence = 0.65 + Math.random() * 0.25;
-          } else {
-            confidence = 0.4 + Math.random() * 0.2;
+          if (Array.isArray(data)) {
+            prices = data.map((d: any) => d.close || d.price || 0).filter(p => p > 0);
+            latestPrice = prices[prices.length - 1] || 0;
+          } else if (data.current?.price) {
+            latestPrice = data.current.price;
+            // If we only have current price, use it for basic analysis
+            prices = [latestPrice];
           }
+          
+          if (prices.length === 0 || latestPrice === 0) {
+            throw new Error("No valid price data");
+          }
+          
+          // Calculate real technical indicators
+          const rsi = prices.length >= 15 ? calculateRSI(prices) : 50;
+          const macdData = prices.length >= 26 ? calculateMACD(prices) : { value: 0, signal: "N/A" };
+          const trend = prices.length >= 20 ? detectTrend(prices) : "N/A";
+          
+          // Generate trading signal based on real analysis
+          const signal = generateSignal(rsi, macdData.signal, trend);
           
           return {
             timeframe: tf.label,
-            direction,
-            confidence,
+            direction: signal.direction,
+            confidence: signal.confidence,
             price: latestPrice,
             rsi: parseFloat(rsi.toFixed(2)),
-            macd: macdPositive ? "Bullish" : "Bearish",
-            trend: trendUp ? "Uptrend" : "Downtrend",
+            macd: macdData.signal,
+            trend,
           };
         } catch (error) {
+          console.error(`Error analyzing ${tf.id}:`, error);
           return {
             timeframe: tf.label,
             direction: "hold" as const,
